@@ -66,9 +66,17 @@ try {
   $cleanUrl = "https://github.com/$owner/$Repo.git"
   $remotes = & $git remote
   if ($remotes -contains 'origin') { & $git remote set-url origin $authedUrl } else { & $git remote add origin $authedUrl }
-  & $git push -u origin main
-  if ($LASTEXITCODE -ne 0) { throw "git push 失败（exit $LASTEXITCODE）" }
+  # git 把进度写到 stderr，$ErrorActionPreference='Stop' 会把它当成异常；
+  # 这里临时放宽，只以 $LASTEXITCODE 判定成败
+  $ErrorActionPreference = 'Continue'
+  & $git push -u origin main 2>&1 | ForEach-Object { Write-Host "    $_" }
+  $pushCode = $LASTEXITCODE
+  if ($pushCode -eq 0) {
+    & $git push --tags 2>&1 | ForEach-Object { Write-Host "    $_" }
+  }
+  $ErrorActionPreference = 'Stop'
   & $git remote set-url origin $cleanUrl
+  if ($pushCode -ne 0) { throw "git push 失败（exit $pushCode）" }
 
   if ($Apk) {
     if (-not (Test-Path $Apk)) { Write-Warning "找不到 APK：$Apk，跳过 Release"; }
